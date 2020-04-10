@@ -1,0 +1,18 @@
+%*****************************************************
+%		用于itoolbox工具箱
+%*****************************************************
+
+Model=ipls(Xcal,Ycal,15,'mean',20,xaxis,'syst123',5);
+15为最大因子数 20为划分区间数,xaxis为光谱数，即变量，这里是1557个点，取光谱图的横坐标即可
+iplsplot(Model,'intlabel')% 插入标签
+plspvsm(Model,6,10)   画校正集
+6为最佳因子数 10为最佳区间
+
+oneModel=plsmodel(Model,10,6,'mean','test',5);   挑选预测集建模去区间和主成分数，10为最佳区间，6为最佳因子数 
+predModel=plspredict(Xtest,oneModel,6,Ytest);    代入预测集光谱和化学值,6为对应的最佳因子数
+plspvsm(predModel,6,1,1);         显示最佳主成分数下的预测集相关系数及预测均方根误差
+主成分分析函数：Princomp
+%edit princomp 在MATLAB中用来显示你通过 Help princomp得到的东西
+[coeff,scores,variances] = princomp(Xcal);
+percent_explained = 100*variances/sum(variances)求方差贡献率
+  
