@@ -1,0 +1,142 @@
+clear all
+clc
+%% 数据读入
+load SNV.mat
+
+% 选定训练集和测试集
+train_shrimp = SNV(1:315,1:254);
+test_shrimp =SNV(316:end,1:254);
+% 标签分离
+train_shrimp_labels = SNV(1:315,255);
+test_shrimp_labels = SNV(316:end,255);
+
+%% 数据归一化
+% [mtrain,ntrain] = size(train_shrimp);
+% [mtest,ntest] = size(test_shrimp);
+% 
+% dataset = [train_shrimp;test_shrimp];
+% [dataset_scale,ps] = mapminmax(dataset',0,1);%mapminmax对列归一化，所以原数据需要转置之后再转置
+% dataset_scale = dataset_scale';
+% 
+% train_shrimp = dataset_scale(1:mtrain,:);
+% test_shrimp = dataset_scale((mtrain+1):(mtrain+mtest),: );
+
+%% 寻优参数设置
+C_min=0; 
+C_max=1000;
+
+g_min=0;
+g_max=1;
+nVar =2;%两个参数
+VarSize = [1 nVar];%方便设置学习步长
+
+%% KELM参数设置
+Elm_Type = 1;      %分类为1，回归为0
+AddLabel=7;   %分类的话有7类
+Kernel_type = 'RBF_kernel';
+
+%% TLBO参数设置
+MaxIt = 20;        % 最大迭代数
+nPop = 30;           % 人口数
+
+
+%% TLBO初始化
+for i=1:nPop
+    pop(i,1) = (C_max-C_min)*rand+C_min;    % 初始种群
+    pop(i,2) = (g_max-g_min)*rand+g_min;
+    fitness(i)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop(i,1),pop(i,2)); %得到适应度值（把pop(i,:)代到目标函数中得到的结果）
+    fitnessgbest=min(fitness);
+end 
+
+
+%% 主循环
+for it=1:MaxIt
+    %计算平均成绩并找到老师
+    pop_m=sum(pop)/nPop;
+    [bestfitness,bestindex]=min(fitness);
+    pop_t=pop(bestindex,:);
+    
+%     %找到老师
+%     [teacher_fitness,teacher_index]=min(fitness);
+%     teacher_position=pop(teacher_index,:);
+
+    %“教”阶段
+    for i=1:nPop
+        %TF = randi([1 2]);%教学因子，有缺陷，只有完全接收和不接收，这步写成 TF = round［1 + rand(0,1);也行
+        TF = unidrnd(2);
+        %教学（向老师看齐）
+        pop_new(i,:)=pop(i,:)+rand(VarSize).*(pop_t - TF*pop_m);%rand(VarSize)生成一行两列0-1随机数
+        %越界处理
+        pop_new(i,pop_new(i,1)>C_max)=C_max;
+        pop_new(i,pop_new(i,1)<C_min)=C_min;
+        pop_new(i,pop_new(i,2)>g_max)=g_max;
+        pop_new(i,pop_new(i,2)<g_min)=g_min;
+        fitness_new(i)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop_new(i,1),pop_new(i,2));
+        if fitness_new(i)<fitness(i)
+            pop(i,:)=pop_new(i,:);
+        end
+    end   
+    %“学”阶段
+    for i=1:nPop
+        A = 1:nPop;
+        A(i)=[];
+        j = A(randi(nPop-1));
+        %Step = pop(i)-pop(j);
+        fitness(i)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop(i,1),pop(i,2));
+        fitness(j)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop(j,1),pop(j,2));
+        if fitness(j) < fitness(i)
+            %Step = -Step;
+            %pop_new(i,:)= pop(i,:) + rand(VarSize).*Step;
+            pop_new(i,:)= pop(i,:) + rand(VarSize).*(pop(j,:)-pop(i,:));
+             else if fitness(j) > fitness(i)
+             pop_new(i,:)= pop(i,:) + rand(VarSize).*(pop(i,:)-pop(j,:));
+            %越界处理
+            pop_new(i,pop_new(i,1)>C_max)=C_max;
+            pop_new(i,pop_new(i,1)<C_min)=C_min;
+            pop_new(i,pop_new(i,2)>g_max)=g_max;
+            pop_new(i,pop_new(i,2)<g_min)=g_min;
+            fitness_new(i)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop_new(i,1),pop_new(i,2));
+        if fitness_new(i)<fitness(i)
+            pop(i,:)=pop_new(i,:);
+           
+            end
+        end
+        end
+    end
+    
+
+for i=1:nPop
+        fitness(i)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop(i,1),pop(i,2));
+        if fitness(i)<fitnessgbest
+            gbest=pop(i,:);
+            fitnessgbest=fitness(i);
+        end
+    end
+    BestCosts(it)=fitnessgbest; %存储最优的值
+    %     for i=1:nPop
+%          fitness(i)=fit_KELM(train_shrimp,train_shrimp_labels,test_shrimp,test_shrimp_labels,pop(i,1),pop(i,2));
+%             [bestfitness_1,bestindex_1]=min(fitness);
+%             best_position=pop(bestindex_1,:);
+%     end
+    %BestCosts(it) = bestfitness_1;
+
+end
+
+%% 画图
+pp=1:1:MaxIt;
+pp=pp';
+figure;
+%plot(BestCost,'LineWidth',2);
+%plot(BestCost,'b-o');
+plot(pp,BestCosts,'--bs','LineWidth',2,'MarkerSize',10,'MarkerEdgeColor','r','MarkerFaceColor',[0.5,0.5,0.5])
+xlabel('Iteration');
+ylabel('1/CCR');
+
+
+        
+       
+       
+
+
+
+
