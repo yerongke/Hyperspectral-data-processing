@@ -1,0 +1,230 @@
+clc;
+clear;
+close all;
+format shortG
+%% Insert Data
+
+data=InsertData();
+
+
+nvar = data.nvar;           % Number of Decision Variables
+SizeX = [1 nvar];     % Decision Variables Matrix Size
+
+lb = -1*ones(1,nvar);       % Lower Bound of Decision Variables
+ub = 1*ones(1,nvar);        % Upper Bound of Decision Variables
+
+%% IWO Parameters
+
+Maxiter = 7;    % Maximum Number of iterations
+
+npop0 = 2;     % Initerial Population Size
+npop = npop0*4;     % Maximum Population Size
+
+Smin = 0;       % Minimum Number of Seeds
+Smax = 5;       % Maximum Number of Seeds
+
+Exponent = 2;           % Variance Reduction Exponent
+sigma_initerial = 1;      % Initerial Value of Standard Deviation
+sigma_final = 0.001;	% Final Value of Standard Deviation
+
+%% Initerialization
+tic
+% Empty Plant Structure
+emp.x = [];
+emp.fit = [];
+emp.info = [];
+
+pop = repmat(emp, npop0, 1);    % Initerial Population Array
+
+for i = 1:numel(pop)
+    
+    % Initerialize x
+    pop(i).x = unifrnd(lb, ub);
+    
+    % Evaluation
+    pop(i)= fitness(pop(i),data);
+    
+end
+
+% Initerialize Best fit History
+BEST = zeros(Maxiter, 1);
+
+%% IWO Main Loop
+
+for iter = 1:Maxiter
+    
+    % Update Standard Deviation
+    sigma = ((Maxiter - iter)/(Maxiter - 1))^Exponent * (sigma_initerial - sigma_final) + sigma_final;
+    
+    % Get Best and Worst fit Values
+    fits = [pop.fit];
+    Bestfit = min(fits);
+    Worstfit = max(fits);
+    
+    % Initerialize Offsprings Population
+    newpop = [];
+    
+    % Reproduction
+    for i = 1:numel(pop)
+        
+        ratio = (pop(i).fit - Worstfit)/(Bestfit - Worstfit);
+        S = floor(Smin + (Smax - Smin)*ratio);
+        
+        for j = 1:S
+            
+            % Initerialize Offspring
+            newsol = emp;
+            
+            % Generate Random Location
+            newsol.x = pop(i).x + sigma * randn(SizeX);
+            
+            % Apply Lower/Upper Bounds
+            newsol.x = CB(newsol.x, lb,ub);
+       
+            
+            % Evaluate Offsring
+            newsol = fitness(newsol,data);
+            
+            % Add Offpsring to the Population
+            newpop = [newpop
+                      newsol];  %#ok
+            
+        end
+        
+    end
+    
+    % Merge Populations
+    [pop] = [pop
+           newpop];
+    
+    % Sort Population
+    [~, ind]=sort([pop.fit]);
+    pop = pop(ind);
+
+    % Competiterive Exclusion (Delete Extra Members)
+    if numel(pop)>npop
+        pop = pop(1:npop);
+    end
+    
+    % Store Best Solution Ever Found
+    gpop = pop(1); % gpop: global Solution
+    
+    % Store Best fit History
+    BEST(iter) = gpop.fit;
+    
+    % Display iteration Information
+    disp(['iter ' num2str(iter) ' Best = ' num2str(BEST(iter))]);
+    
+end
+
+%% Results
+disp([ ' Best Solution = ' num2str(gpop.x) ])
+disp([ ' Best fitness = ' num2str(gpop.fit) ])
+disp([ ' Time = ' num2str(toc) ])
+
+
+figure;
+semilogy(BEST,'LineWidth',2);
+xlabel('iteration');
+ylabel('Fitness');
+title('IWO')
+
+
+load data
+net=gpop.info.net;
+
+trainO=net(trainX);
+trainErrors=trainY-trainO;
+trainMSE=mean(trainErrors(:).^2);
+trainRMSE=sqrt(trainMSE);
+trainErrorMean=mean(trainErrors);
+trainErrorStd=std(trainErrors);
+disp('-----------------------------------------')
+disp([ ' Train MSE = '  num2str(trainMSE)]);
+disp('-----------------------------------------')
+
+
+testO=net(testX);
+testErrors=testY-testO;
+testMSE=mean(testErrors(:).^2);
+testRMSE=sqrt(testMSE);
+testErrorMean=mean(testErrors);
+testErrorStd=std(testErrors);
+
+disp([ ' Test MSE = '  num2str(testMSE)]);
+disp('-----------------------------------------')
+
+
+figure;PlotResults(trainY,trainO,'train');
+figure;PlotResults(testY,testO,'test');
+
+inputs=data(:,1:n_column_input)';
+targets=data(:,n_column_input+1:end)';
+net.plotFcns = {'plotperform','plottrainstate','ploterrhist', ...
+  'plotregression', 'plotfit'};
+
+% Train the Network
+[net,tr] = train(net,inputs,targets);
+
+% Test the Network
+outputs = net(inputs);
+errors = gsubtract(targets,outputs);
+performance = perform(net,targets,outputs)
+trainInd=tr.trainInd;
+trainInputs = inputs(:,trainInd);
+trainTargets = targets(:,trainInd);
+trainOutputs = outputs(:,trainInd);
+trainErrors = trainTargets-trainOutputs;
+
+% Recalculate Training, Validation and Test Performance
+trainTargets = targets .* tr.trainMask{1};
+valTargets = targets  .* tr.valMask{1};
+testTargets = targets  .* tr.testMask{1};
+trainPerformance = perform(net,trainTargets,outputs)
+valPerformance = perform(net,valTargets,outputs)
+testPerformance = perform(net,testTargets,outputs)
+valInd=tr.valInd;
+valInputs = inputs(:,valInd);
+valTargets = targets(:,valInd);
+valOutputs = outputs(:,valInd);
+valErrors = valTargets-valOutputs;
+testInd=tr.testInd;
+testInputs = inputs(:,testInd);
+testTargets = targets(:,testInd);
+testOutputs = outputs(:,testInd);
+testError = testTargets-testOutputs;
+
+trainO=net(trainX);
+testO=net(testX);
+
+
+
+
+PlotResults(targets,outputs,'All Data');
+PlotResults(trainY,trainO,'Train Data');
+PlotResults(testY,testO,'Test Data');
+
+CalError(targets,outputs,'All Data');
+CalError(trainTargets,trainOutputs,'Train Data');
+CalError(valTargets,valOutputs,'Validation Data');
+CalError(testTargets,testOutputs,'Test Data');
+
+
+Q=[];
+disp('======================')
+disp('Forecast')
+disp('======================')
+for i=1:nPredict
+   j=Ndata+i; 
+   xpred=inputs(:,end-i+1); 
+%    ypred(i)=mapminmax('reverse',net(xpred(:,i)),PS);
+    ypred=net(xpred);
+%     ypred=mapminmax('reverse',ypred',psy)';
+
+   disp(['step ' num2str(j) ' = ' num2str(ypred)])
+    [Q]=[Q;[j ypred]];
+end
+
+
+
+
