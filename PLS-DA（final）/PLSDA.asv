@@ -1,0 +1,10 @@
+load xia.mat;
+a=xia(1:315,1:254);
+a1=xia(1:315,255);
+b=xia(315:end,1:254);
+b1=xia(315:end,255);
+[ccr,cvr,ypredict,ycredict,yc,yp,ys]=PLS_DA(a,a1,b,b1,5);
+B=round(yp);
+k1 = length(find(b1 == T_sim_1));
+n1 = length(Y2);
+CCR=n1/k1 ;

@@ -1,0 +1,14 @@
+load SG.mat;
+q=xlsread('tezhen.xlsx');
+q1=q(1,1:7);
+q2=q(2,1:52);
+q3=q(3,1:11);
+a=SG(1:315,1:254);
+a1=SG(1:315,255);
+b=SG(316:end,1:254);
+b1=SG(316:end,255);
+[ccr,cvr,ypredict,ycredict,yc,yp,ys]=PLS_DA(a,a1,b,b1,18);
+B=round(yp);
+k1 = length(find(b1 == B));
+n1 = length(b1);
+CCR=k1/n1 ;
